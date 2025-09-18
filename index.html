@@ -3,23 +3,47 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Personal Invoice</title>
+  <title>Smart Invoice / Expense Tracker</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f9fafb; margin: 20px; }
-    .page { max-width: 800px; margin: auto; background: white; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
-    h2 { text-align: center; margin-bottom: 20px; }
+    .page { max-width: 900px; margin: auto; background: white; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
+    h2 { text-align: center; margin: 10px 0; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
     th { background: #f1f5f9; }
     .btn { padding: 8px 12px; margin: 5px; cursor: pointer; border-radius: 6px; border: 1px solid #ddd; }
     .btn.primary { background: #0ea5e9; color: white; border-color: #0ea5e9; }
-    .total { text-align: right; font-weight: bold; margin-top: 10px; font-size: 18px; }
-    @media print { .actions { display: none; } body { background: white; } .page { border: none; } }
+    .total { text-align: right; font-weight: bold; margin-top: 10px; font-size: 16px; }
+    .actions { margin-top: 10px; }
+    .invoice-info { display: flex; justify-content: space-between; margin-bottom: 15px; }
+    .invoice-info label { font-weight: bold; }
+    .invoice-info input, .invoice-info select { margin-left: 5px; padding: 4px; }
+    .split { margin-top: 10px; font-weight: bold; }
+    .branding { text-align: center; margin-bottom: 10px; }
+    #logo { max-height: 60px; margin-top: 5px; }
+    @media print { .actions, #logoUpload { display: none; } body { background: white; } .page { border: none; } }
   </style>
 </head>
 <body>
   <div class="page">
-    <h2>Personal Invoice</h2>
+    <div class="branding">
+      <input type="file" id="logoUpload" accept="image/*">
+      <h2 contenteditable="true">My Invoice</h2>
+      <img id="logo" style="display:none;">
+    </div>
+
+    <div class="invoice-info">
+      <label>Invoice No: <input type="text" id="invoiceNo" value="INV-001"></label>
+      <label>Date: <input type="date" id="invoiceDate"></label>
+      <label>Currency:
+        <select id="currencySelect">
+          <option value="₹">₹ INR</option>
+          <option value="$">$ USD</option>
+          <option value="€">€ EUR</option>
+          <option value="£">£ GBP</option>
+        </select>
+      </label>
+    </div>
 
     <table id="invoiceTable">
       <thead>
@@ -27,6 +51,7 @@
           <th>Item</th>
           <th>Qty</th>
           <th>Price</th>
+          <th>Category</th>
           <th>Total</th>
           <th>Action</th>
         </tr>
@@ -37,10 +62,20 @@
     <div class="actions">
       <button id="addRowBtn" class="btn">+ Add Item</button>
       <button id="clearBtn" class="btn">Clear</button>
+      <button id="saveBtn" class="btn">Save</button>
+      <button id="loadBtn" class="btn">Load</button>
+      <button id="exportJSON" class="btn">Export JSON</button>
+      <button id="exportCSV" class="btn">Export CSV</button>
       <button id="printBtn" class="btn primary">Print / Save PDF</button>
     </div>
 
     <div id="grandTotal" class="total">Grand Total: ₹0.00</div>
+    <div id="summary" class="total"></div>
+
+    <div class="split">
+      <label>Participants: <input type="number" id="participants" min="1" value="1"></label>
+      <div id="perPerson">Each Person Owes: ₹0.00</div>
+    </div>
   </div>
 
   <script>
@@ -48,22 +83,42 @@
     const addRowBtn = document.getElementById('addRowBtn');
     const printBtn = document.getElementById('printBtn');
     const clearBtn = document.getElementById('clearBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
     const grandTotalEl = document.getElementById('grandTotal');
+    let currencySymbol = "₹";
+
+    // Auto-fill date
+    document.getElementById('invoiceDate').valueAsDate = new Date();
+
+    document.getElementById("currencySelect").addEventListener("change", (e) => {
+      currencySymbol = e.target.value;
+      recalcTotals();
+    });
 
     function formatCurrency(value) {
-      return `₹${(value || 0).toFixed(2)}`;
+      return `${currencySymbol}${(value || 0).toFixed(2)}`;
     }
 
-    function addRow() {
+    function addRow(data = {}) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input type="text" placeholder="Item" /></td>
-        <td><input type="number" min="1" value="1" /></td>
-        <td><input type="number" min="0" value="0" step="0.01" /></td>
+        <td><input type="text" placeholder="Item" value="${data.item || ''}" /></td>
+        <td><input type="number" min="1" value="${data.qty || 1}" /></td>
+        <td><input type="number" min="0" value="${data.price || 0}" step="0.01" /></td>
+        <td>
+          <select>
+            <option ${data.category==='General'?'selected':''}>General</option>
+            <option ${data.category==='Food'?'selected':''}>Food</option>
+            <option ${data.category==='Travel'?'selected':''}>Travel</option>
+            <option ${data.category==='Project'?'selected':''}>Project</option>
+            <option ${data.category==='Misc'?'selected':''}>Misc</option>
+          </select>
+        </td>
         <td class="rowTotal">₹0.00</td>
         <td><button class="btn">✕</button></td>
       `;
-      tr.querySelectorAll('input').forEach(input => {
+      tr.querySelectorAll('input, select').forEach(input => {
         input.addEventListener('input', recalcTotals);
       });
       tr.querySelector('button').addEventListener('click', () => { tr.remove(); recalcTotals(); });
@@ -72,20 +127,110 @@
     }
 
     function recalcTotals() {
-      let grandTotal = 0;
+      let grandTotal = 0, totals = [];
       itemsBody.querySelectorAll('tr').forEach(row => {
         const qty = parseFloat(row.children[1].querySelector('input').value) || 0;
         const price = parseFloat(row.children[2].querySelector('input').value) || 0;
         const total = qty * price;
         row.querySelector('.rowTotal').textContent = formatCurrency(total);
+        totals.push(total);
         grandTotal += total;
       });
+
       grandTotalEl.textContent = "Grand Total: " + formatCurrency(grandTotal);
+
+      // Summary
+      if (totals.length) {
+        const avg = grandTotal / totals.length;
+        const max = Math.max(...totals);
+        const min = Math.min(...totals);
+        document.getElementById("summary").textContent =
+          `Items: ${totals.length}, Avg: ${formatCurrency(avg)}, Highest: ${formatCurrency(max)}, Lowest: ${formatCurrency(min)}`;
+      } else {
+        document.getElementById("summary").textContent = "";
+      }
+
+      // Split expense
+      let participants = parseInt(document.getElementById('participants').value) || 1;
+      document.getElementById('perPerson').textContent = `Each Person Owes: ${formatCurrency(grandTotal / participants)}`;
     }
 
-    addRowBtn.addEventListener('click', addRow);
+    function saveInvoice() {
+      const rows = [];
+      itemsBody.querySelectorAll('tr').forEach(row => {
+        rows.push({
+          item: row.children[0].querySelector('input').value,
+          qty: row.children[1].querySelector('input').value,
+          price: row.children[2].querySelector('input').value,
+          category: row.children[3].querySelector('select').value
+        });
+      });
+      localStorage.setItem("invoiceData", JSON.stringify({
+        rows, currencySymbol,
+        invoiceNo: document.getElementById('invoiceNo').value,
+        date: document.getElementById('invoiceDate').value
+      }));
+      alert("Invoice saved!");
+    }
+
+    function loadInvoice() {
+      const data = JSON.parse(localStorage.getItem("invoiceData"));
+      if (!data) { alert("No saved invoice found."); return; }
+      itemsBody.innerHTML = "";
+      currencySymbol = data.currencySymbol || "₹";
+      document.getElementById("currencySelect").value = currencySymbol;
+      document.getElementById("invoiceNo").value = data.invoiceNo || "INV-001";
+      document.getElementById("invoiceDate").value = data.date || new Date().toISOString().split("T")[0];
+      data.rows.forEach(r => addRow(r));
+      recalcTotals();
+      alert("Invoice loaded!");
+    }
+
+    // Export JSON
+    document.getElementById("exportJSON").addEventListener("click", () => {
+      const data = localStorage.getItem("invoiceData") || "{}";
+      downloadFile("invoice.json", data);
+    });
+
+    // Export CSV
+    document.getElementById("exportCSV").addEventListener("click", () => {
+      let csv = "Item,Qty,Price,Category,Total\n";
+      itemsBody.querySelectorAll('tr').forEach(row => {
+        let item = row.children[0].querySelector('input').value;
+        let qty = row.children[1].querySelector('input').value;
+        let price = row.children[2].querySelector('input').value;
+        let cat = row.children[3].querySelector('select').value;
+        let total = row.querySelector('.rowTotal').textContent;
+        csv += `${item},${qty},${price},${cat},${total}\n`;
+      });
+      downloadFile("invoice.csv", csv);
+    });
+
+    function downloadFile(filename, content) {
+      const blob = new Blob([content], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    // Logo upload
+    document.getElementById('logoUpload').addEventListener('change', function(e){
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(evt){
+        const logo = document.getElementById('logo');
+        logo.src = evt.target.result;
+        logo.style.display = 'block';
+      }
+      reader.readAsDataURL(file);
+    });
+
+    addRowBtn.addEventListener('click', () => addRow());
     printBtn.addEventListener('click', () => window.print());
     clearBtn.addEventListener('click', () => { itemsBody.innerHTML = ''; addRow(); recalcTotals(); });
+    saveBtn.addEventListener('click', saveInvoice);
+    loadBtn.addEventListener('click', loadInvoice);
 
     // Start with one row
     addRow();
