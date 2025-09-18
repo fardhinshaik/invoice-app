@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Invoice</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f9fafb; margin: 20px; }
+    .page { max-width: 800px; margin: auto; background: white; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
+    h2 { text-align: center; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #f1f5f9; }
+    .btn { padding: 8px 12px; margin: 5px; cursor: pointer; border-radius: 6px; border: 1px solid #ddd; }
+    .btn.primary { background: #0ea5e9; color: white; border-color: #0ea5e9; }
+    .total { text-align: right; font-weight: bold; margin-top: 10px; font-size: 18px; }
+    @media print { .actions { display: none; } body { background: white; } .page { border: none; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h2>Personal Invoice</h2>
+
+    <table id="invoiceTable">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Total</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="itemsBody"></tbody>
+    </table>
+
+    <div class="actions">
+      <button id="addRowBtn" class="btn">+ Add Item</button>
+      <button id="clearBtn" class="btn">Clear</button>
+      <button id="printBtn" class="btn primary">Print / Save PDF</button>
+    </div>
+
+    <div id="grandTotal" class="total">Grand Total: ₹0.00</div>
+  </div>
+
+  <script>
+    const itemsBody = document.getElementById('itemsBody');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const printBtn = document.getElementById('printBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const grandTotalEl = document.getElementById('grandTotal');
+
+    function formatCurrency(value) {
+      return `₹${(value || 0).toFixed(2)}`;
+    }
+
+    function addRow() {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" placeholder="Item" /></td>
+        <td><input type="number" min="1" value="1" /></td>
+        <td><input type="number" min="0" value="0" step="0.01" /></td>
+        <td class="rowTotal">₹0.00</td>
+        <td><button class="btn">✕</button></td>
+      `;
+      tr.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', recalcTotals);
+      });
+      tr.querySelector('button').addEventListener('click', () => { tr.remove(); recalcTotals(); });
+      itemsBody.appendChild(tr);
+      recalcTotals();
+    }
+
+    function recalcTotals() {
+      let grandTotal = 0;
+      itemsBody.querySelectorAll('tr').forEach(row => {
+        const qty = parseFloat(row.children[1].querySelector('input').value) || 0;
+        const price = parseFloat(row.children[2].querySelector('input').value) || 0;
+        const total = qty * price;
+        row.querySelector('.rowTotal').textContent = formatCurrency(total);
+        grandTotal += total;
+      });
+      grandTotalEl.textContent = "Grand Total: " + formatCurrency(grandTotal);
+    }
+
+    addRowBtn.addEventListener('click', addRow);
+    printBtn.addEventListener('click', () => window.print());
+    clearBtn.addEventListener('click', () => { itemsBody.innerHTML = ''; addRow(); recalcTotals(); });
+
+    // Start with one row
+    addRow();
+  </script>
+</body>
+</html>
